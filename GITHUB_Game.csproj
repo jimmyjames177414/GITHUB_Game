@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Target frameworks for Android, iOS and Windows. Adjust the Windows version as needed. -->
+    <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-windows10.0.19041.0</TargetFrameworks>
+
+    <!-- Enable .NET MAUI and single‑project support. -->
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+
+    <!-- Turn on implicit usings and nullable reference types. -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- App metadata -->
+    <ApplicationTitle>GITHUB Game</ApplicationTitle>
+    <ApplicationId>com.yourorg.githubgame</ApplicationId>
+    <ApplicationVersion>1.0.0</ApplicationVersion>
+  </PropertyGroup>
+
+  <!-- NuGet package references.  The CommunityToolkit provides helpers and nice UI components and the
+       Plugin.Maui.Audio package enables playing simple sound effects. Versions are pinned here for
+       reproducibility. -->
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Maui" Version="12.2.0" />
+    <PackageReference Include="Plugin.Maui.Audio" Version="4.0.0" />
+  </ItemGroup>
+
+  <!-- Embed files from the wwwroot folder into the application bundle.  This folder contains
+       your Blazor assets such as HTML, CSS and JavaScript. -->
+  <ItemGroup>
+    <MauiAsset Include="wwwroot\**\*" LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
