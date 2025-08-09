@@ -1,0 +1,211 @@
+@page "/game"
+@using System.Text.Json
+@implements IDisposable
+@inject IJSRuntime JS
+
+<!--
+    A simple idle clicker game implemented in Blazor.  Tap the big button to
+    accumulate XP.  Purchase upgrades to increase XP per tap and automatic XP
+    generation per second.  Prestige resets progress in exchange for a
+    multiplier.  Game state is persisted locally via JavaScript and MAUI
+    Preferences.
+-->
+
+<div class="game">
+    <h1>🐞 Bug&nbsp;Squash&nbsp;Tycoon</h1>
+
+    <div class="stats">
+        <div>XP: @Format(State.XP)</div>
+        <div>Per Tap: @State.XpPerTap</div>
+        <div>Auto/sec: @State.AutoPerSec</div>
+        <div>Prestige Multiplier: x@State.PrestigeMult</div>
+    </div>
+
+    <button class="tap" @onclick="Tap">Squash!</button>
+
+    <div class="upgrades">
+        <h3>Upgrades</h3>
+        <button @onclick="() => BuyUpgrade(UpgradeType.TapPower)">
+            +Tap Power (Cost: @Cost(UpgradeType.TapPower))
+        </button>
+        <button @onclick="() => BuyUpgrade(UpgradeType.Auto)">
+            +Auto (Cost: @Cost(UpgradeType.Auto))
+        </button>
+    </div>
+
+    <div class="actions">
+        <button @onclick="Prestige" disabled="@(!CanPrestige())">Prestige</button>
+        <button @onclick="ToggleSound">@((State.SoundOn ? "🔊" : "🔈")) Sound</button>
+        <button @onclick="ResetConfirm">Reset</button>
+    </div>
+</div>
+
+@code {
+    private GameState State = new();
+    private System.Timers.Timer? _timer;
+    private DateTime _lastSave = DateTime.MinValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        // Start a timer that fires once per second to add auto XP.
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += (_, __) =>
+        {
+            InvokeAsync(() =>
+            {
+                State.XP += (long)Math.Round(State.AutoPerSec * State.PrestigeMult);
+                StateHasChanged();
+            });
+        };
+        _timer.AutoReset = true;
+        _timer.Enabled = true;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+
+    private async Task Tap()
+    {
+        State.XP += (long)Math.Round(State.XpPerTap * State.PrestigeMult);
+        await HapticAsync();
+        await SaveAsyncThrottled();
+    }
+
+    private enum UpgradeType { TapPower, Auto }
+
+    private long Cost(UpgradeType type)
+    {
+        var baseCost = type == UpgradeType.TapPower ? 10 : 25;
+        var level = type == UpgradeType.TapPower ? State.TapLevel : State.AutoLevel;
+        return (long)Math.Round(baseCost * Math.Pow(1.25, level));
+    }
+
+    private async Task BuyUpgrade(UpgradeType type)
+    {
+        var cost = Cost(type);
+        if (State.XP < cost) return;
+        State.XP -= cost;
+        if (type == UpgradeType.TapPower)
+        {
+            State.TapLevel++;
+            State.XpPerTap = 1 + Math.Round(State.TapLevel * 0.9, 2);
+        }
+        else
+        {
+            State.AutoLevel++;
+            State.AutoPerSec = Math.Round(State.AutoLevel * 0.6, 2);
+        }
+        await SaveAsyncThrottled();
+    }
+
+    private bool CanPrestige() => State.XP >= 5000;
+
+    private async Task Prestige()
+    {
+        if (!CanPrestige()) return;
+        State.PrestigeMult = Math.Round(State.PrestigeMult + 0.25, 2);
+        var mult = State.PrestigeMult;
+        State = new GameState { PrestigeMult = mult };
+        await SaveAsync();
+    }
+
+    private async Task ToggleSound()
+    {
+        State.SoundOn = !State.SoundOn;
+        await SaveAsyncThrottled();
+    }
+
+    private async Task ResetConfirm()
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "Reset progress?"))
+        {
+            State = new GameState { PrestigeMult = State.PrestigeMult };
+            await SaveAsync();
+        }
+    }
+
+    private async Task HapticAsync()
+    {
+#if ANDROID || IOS
+        try
+        {
+            await JS.InvokeVoidAsync("haptics.light");
+        }
+        catch
+        {
+            // ignore; haptics may not be available
+        }
+#endif
+    }
+
+    // Persistence helpers.  Persist state both in Blazor (localStorage) and
+    // MAUI Preferences.  When loading, try JS first then MAUI.  Saving is
+    // throttled to avoid excess writes.
+    private async Task SaveAsyncThrottled()
+    {
+        if ((DateTime.UtcNow - _lastSave).TotalMilliseconds < 500) return;
+        _lastSave = DateTime.UtcNow;
+        await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        var json = JsonSerializer.Serialize(State);
+        try
+        {
+            await JS.InvokeVoidAsync("gameStorage.save", json);
+        }
+        catch { }
+#if ANDROID || IOS || WINDOWS
+        try
+        {
+            Microsoft.Maui.Storage.Preferences.Set("game_save", json);
+        }
+        catch { }
+#endif
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("gameStorage.load");
+            if (string.IsNullOrWhiteSpace(json))
+            {
+#if ANDROID || IOS || WINDOWS
+                json = Microsoft.Maui.Storage.Preferences.Get("game_save", "");
+#endif
+            }
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                State = JsonSerializer.Deserialize<GameState>(json) ?? new GameState();
+            }
+        }
+        catch
+        {
+            // ignore; start new game state
+        }
+    }
+
+    private static string Format(long n)
+    {
+        if (n >= 1_000_000) return $"{n / 1_000_000.0:0.##}M";
+        if (n >= 1_000) return $"{n / 1000.0:0.##}K";
+        return n.ToString();
+    }
+
+    private class GameState
+    {
+        public long XP { get; set; } = 0;
+        public double XpPerTap { get; set; } = 1;
+        public double AutoPerSec { get; set; } = 0;
+        public int TapLevel { get; set; } = 0;
+        public int AutoLevel { get; set; } = 0;
+        public double PrestigeMult { get; set; } = 1.0;
+        public bool SoundOn { get; set; } = true;
+    }
+}
