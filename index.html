@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GITHUB Game</title>
+    <base href="/" />
+    <link href="css/game.css" rel="stylesheet" />
+</head>
+<body>
+    <div id="app">Loading...</div>
+
+    <!-- Provide simple persistence and haptics implementations for the game -->
+    <script>
+        window.gameStorage = {
+            save: function (json) {
+                try {
+                    localStorage.setItem('bug-squash-save', json);
+                } catch (e) {
+                    console.warn('Unable to save game state', e);
+                }
+            },
+            load: function () {
+                try {
+                    return localStorage.getItem('bug-squash-save') || "";
+                } catch (e) {
+                    console.warn('Unable to load game state', e);
+                    return "";
+                }
+            }
+        };
+        window.haptics = {
+            light: function () {
+                if (navigator.vibrate) {
+                    navigator.vibrate(15);
+                }
+            }
+        };
+    </script>
+
+    <script src="_framework/blazor.webview.js"></script>
+</body>
+</html>
