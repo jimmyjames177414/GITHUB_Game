@@ -1,0 +1,15 @@
+@using Microsoft.AspNetCore.Components.Routing
+
+<!--
+    The root Razor component for the Blazor portion of the application.  This
+    file defines a router that maps routes to components.  If no route matches
+    the incoming URL, the Game page is rendered by default.
+-->
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" />
+    </Found>
+    <NotFound>
+        <Pages.Game />
+    </NotFound>
+</Router>
